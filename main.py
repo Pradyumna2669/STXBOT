@@ -14,7 +14,7 @@ import aiohttp
 import io
 import psutil
 import pytz
-from jinja2 import Template
+from jinja2 import Template, Environment, BaseLoader
 from dotenv import load_dotenv
 load_dotenv()
 DATA_FILE = "channels.json"
@@ -23,7 +23,7 @@ TICKET_COUNTER_FILE = "ticket_counter.txt"
 TICKET_CREATION_MESSAGE_FILE = "ticket_creation_message_id.txt"
 pseudo_mod_list = []  # List of users to be approved for pseudo-mod role
 mod_promotion_list = []  # List of pseudo-mods to be promoted to full mods
-MUTE_ROLE_ID = '1204518909806387321'
+MUTE_ROLE_ID = '5674654546746756'
 WARNINGS_FILE = 'warnings.json'
 # File to store monitored VC IDs persistently
 MONITORED_VC_FILE = "monitored_vcs.json"
@@ -176,6 +176,19 @@ def save_ticket_creation_message_id():
     """Save the ticket creation message ID to a file."""
     with open(TICKET_CREATION_MESSAGE_FILE, "w") as f:
         f.write(str(TICKET_CREATION_MESSAGE_ID))
+from jinja2 import Environment, BaseLoader
+
+# Define the custom filter
+def replace_mentions_filter(content, users):
+    """Replace user mentions in the message content with their usernames."""
+    for user_id, username in users.items():
+        content = content.replace(f"<@{user_id}>", f"@{username}")
+        content = content.replace(f"<@!{user_id}>", f"@{username}")  # Handle nicknames
+    return content
+
+# Create a Jinja2 environment with the custom filter
+env = Environment(loader=BaseLoader)
+env.filters['replace_mentions'] = replace_mentions_filter
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -212,25 +225,28 @@ def save_monitored_vcs():
 MONITORED_VC_IDS = load_monitored_vcs()
     
 # Your Discord bot setup
-GUILD_ID = 54565464654654546
-AFK_VC_ID = 767867676786786
-TOKEN = 'DCTOKEN'  # Use environment variables for sensitive data
-ROLE_ID = 1256891000207441923  # Role to assign for compliant users
-ABUSE_LOG_CHANNEL_ID = 465464564564565646  # Replace with your actual abuse log channel ID
-MOD_LOG_CHANNEL_ID = 456456456456456456978
-MUTE_ROLE_ID = 465464654545455  # Replace with your actual Muted role ID
-MORNING_GRIND_ROLE_ID = 54554458654666456  # Replace with your actual Morning Grind role ID
-4EVENING_GRIND_ROLE_ID = 456456456456456456  # Replace with your actual Eve-Night Grind role ID
-PSEUDO_MOD_ROLE_ID = 46545645645645645  # Replace with actual role ID
-MOD_ROLE_ID = 1080695859093717043  # Replace with your actual Moderator role ID
-ELDER_ROLE_ID = 1120673829350555698  # Replace with your actual Elder role ID
-STAFF_ROLE_ID = 1153572889895899166
-ADMIN_ROLE_ID = 1121001670596378725
-TICKET_CREATION_CHANNEL_ID = 1308361779126210621
-TRANSCRIPTS_CHANNEL_ID = 1308361723505278996
-TICKET_CATEGORY_ID = 1308361725980049509
-SUPPORT_ROLE_ID = 1153572889895899166
-GITHUB_TOKEN = "fgd_stgdfhxdfjhfxdhknsjjgfhxdgh"
+GUILD_ID = 4644654346354453
+AFK_VC_ID = 43435124652626424
+TOKEN = 'etzsgdxzffhxdt65h41dt65h1d51yty'  # Use environment variables for sensitive data
+ROLE_ID = 67654567875872873755  # Role to assign for compliant users
+ABUSE_LOG_CHANNEL_ID = 77567867867676  # Replace with your actual abuse log channel ID
+MOD_LOG_CHANNEL_ID = 7867886786786786
+MUTE_ROLE_ID = 787676798867867896786  # Replace with your actual Muted role ID
+MORNING_GRIND_ROLE_ID = 786788678867886786786  # Replace with your actual Morning Grind role ID
+AFTERNOON_GRIND_ROLE_ID = 786786786786786786  # Replace with your actual Afternoon Grind role ID
+EVENING_GRIND_ROLE_ID = 78867889676786786786  # Replace with your actual Eve-Night Grind role ID
+PSEUDO_MOD_ROLE_ID = 7867867867869786786  # Replace with actual role ID
+MOD_ROLE_ID = 786786786786786867  # Replace with your actual Moderator role ID
+ELDER_ROLE_ID = 7678676786786756  # Replace with your actual Elder role ID
+STAFF_ROLE_ID = 767867867867678676
+ADMIN_ROLE_ID = 78678678678677837
+TICKET_CREATION_CHANNEL_ID = 7678678672872723752
+TRANSCRIPTS_CHANNEL_ID = 737645324556484832453
+TICKET_CATEGORY_ID = 673786345378678567563
+SUPPORT_ROLE_ID = 7867675532786737563793
+BOT_ROLE_ID = 76373782786745645645  # Replace with your actual bot role ID
+GITHUB_TOKEN = "dgsdrtstsetbwst516841se541s"
+
 
 # List of NSFW keywords (add your words here)
 NSFW_KEYWORDS = [
@@ -271,20 +287,30 @@ def has_allowed_role():
         return any(role.id in ALLOWED_ROLE_IDS for role in ctx.author.roles)
     return commands.check(predicate)
 
+def is_bot_user(member):
+    """Check if member has the bot role (for pseudo-bot accounts)"""
+    return any(role.id == BOT_ROLE_ID for role in member.roles)
+
 @bot.event
 async def on_ready():
     logger.info(f'Logged in as {bot.user.name}')
     load_monitored_vcs()  # Load monitored VCs on startup
     await bot.tree.sync()  # Ensure slash commands are registered
-
-    if not check_compliance.is_running():
-        check_compliance.start()  # Start compliance checks
-
-    # Remove the specified role from all members in the guild
+        # Remove the specified role from all members in the guild
     guild = bot.get_guild(GUILD_ID)
     if guild is None:
         logger.warning("Guild not found!")
         return
+    
+    if guild:
+        for vc_id in MONITORED_VC_IDS:
+            vc = guild.get_channel(vc_id)
+            if vc and isinstance(vc, discord.VoiceChannel):
+                for member in vc.members:
+                    user_compliance[member.id] = {'warn_count': 0, 'monitoring': True}
+                    await check_compliance_status(member)
+    if not check_compliance.is_running():
+        check_compliance.start()  # Start compliance checks
 
     role_to_remove = guild.get_role(ROLE_ID)
     if role_to_remove is None:
@@ -312,9 +338,10 @@ MONITORED_VC_IDS = set()  # Ensure it's always a set
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    if is_bot_user(member):  # Changed from member.bot
+        return
     guild = bot.get_guild(GUILD_ID)
     role = guild.get_role(ROLE_ID)
-
     if after.channel and after.channel.id in MONITORED_VC_IDS:  # User joins a monitored VC
         if before.channel is None or before.channel.id not in MONITORED_VC_IDS:
             # Start compliance monitoring
@@ -352,7 +379,7 @@ async def on_voice_state_update(member, before, after):
             logger.info(f"Removed role {role.name} from {member.name} as they left VC.")
         except discord.Forbidden:
             logger.warning(f"Unable to remove role from {member.name}. Missing permissions.")
-
+        
 async def schedule_compliance_check(member):
     """Schedules compliance check every 1 minute if user is still non-compliant"""
     await asyncio.sleep(60)
@@ -361,6 +388,8 @@ async def schedule_compliance_check(member):
 
 async def check_compliance_status(member):
     """Checks if a member is complying and takes action if not"""
+    if is_bot_user(member):  # Changed from member.bot
+        return
     guild = bot.get_guild(GUILD_ID)
     role = guild.get_role(ROLE_ID)
 
@@ -385,6 +414,8 @@ async def check_compliance_status(member):
 @tasks.loop(seconds=60)
 async def check_compliance():
     """Periodically checks compliance for all monitored users"""
+    if is_bot_user(member):  # Changed from member.bot
+        return
     guild = bot.get_guild(GUILD_ID)
     role = guild.get_role(ROLE_ID)
 
@@ -496,43 +527,49 @@ async def on_command_error(ctx, error):
 @app_commands.describe(action="add, remove, or list", vc="Voice channel to modify")
 async def monitor_vc(interaction: discord.Interaction, action: str, vc: discord.VoiceChannel = None):
     """Manage monitored voice channels dynamically."""
-
     global MONITORED_VC_IDS
 
-    # ✅ Ensure interaction doesn't expire (Defer only if not done)
     if not interaction.response.is_done():
         await interaction.response.defer(thinking=True)
 
-    # Convert action to lowercase for case-insensitivity
     action = action.lower()
-
     if action == "add":
         if vc:
             MONITORED_VC_IDS.add(vc.id)
             save_monitored_vcs()
-            response_message = f"✅ Added **{vc.name}** to monitored VCs."
+            
+            # Check all current members in the VC
+            for member in vc.members:
+                if member.id not in user_compliance:
+                    user_compliance[member.id] = {'warn_count': 0, 'monitoring': True}
+                    await check_compliance_status(member)
+                    asyncio.create_task(schedule_compliance_check(member))
+            
+            response_message = f"✅ Added **{vc.name}** to monitored VCs and checking current members."
         else:
             response_message = "❌ Please mention a valid voice channel."
-
     elif action == "remove":
         if vc and vc.id in MONITORED_VC_IDS:
             MONITORED_VC_IDS.remove(vc.id)
             save_monitored_vcs()
+            
+            # Remove compliance tracking for members in this VC
+            for member in vc.members:
+                if member.id in user_compliance:
+                    user_compliance.pop(member.id, None)
+            
             response_message = f"✅ Removed **{vc.name}** from monitored VCs."
         else:
             response_message = "❌ This channel is not in the monitored list."
-
     elif action == "list":
         if MONITORED_VC_IDS:
             vc_list = "\n".join([f"<#{vc_id}>" for vc_id in MONITORED_VC_IDS])
             response_message = f"📢 **Monitored VCs:**\n{vc_list}"
         else:
             response_message = "❌ No monitored VCs."
-
     else:
         response_message = "❌ Invalid action. Use `add`, `remove`, or `list`."
 
-    # ✅ Send response via follow-up
     await interaction.followup.send(response_message, ephemeral=(action != "list"))  
 
 @bot.tree.command(name="add_pseudo_mod", description="Add Pseudo Mod in List")
@@ -706,6 +743,25 @@ async def health(ctx):
     # Send the embed message
     await ctx.send(embed=embed)
 
+@bot.command(name="pingvc")
+async def ping_vc_members(ctx):
+    # Try to get the VC from the user first
+    if ctx.author.voice:
+        voice_channel = ctx.author.voice.channel
+    else:
+        # Fallback: Try to find a VC matching the text channel's name
+        voice_channel = discord.utils.get(ctx.guild.voice_channels, name=ctx.channel.name)
+        
+        if not voice_channel:
+            return await ctx.send("❌ Could not find a linked voice channel!")
+
+    members = voice_channel.members
+    if not members:
+        return await ctx.send("🔇 No one is in this voice channel!")
+    
+    mentions = [m.mention for m in members if not m.bot]
+    await ctx.send(f"📢 **Pinging VC Members:** {' '.join(mentions)}")
+
 @bot.command()
 @has_allowed_role()  # Replace with your role check decorator
 async def warn(ctx, member: discord.Member, *, reason: str = "No reason specified."):
@@ -734,14 +790,21 @@ async def warn(ctx, member: discord.Member, *, reason: str = "No reason specifie
     if mod_log_channel:
         await mod_log_channel.send(embed=embed)
 
-    # Notify the user
+    # Notify the user (with error handling for DMs)
     user_embed = discord.Embed(
         title="Warning Notification",
         description=f"You have received a warning. Total warnings: {user_warnings[user_id]}",
         color=discord.Color.yellow()  # Different color for user notification
     )
     user_embed.add_field(name="Reason", value=reason)
-    await member.send(embed=user_embed)
+    
+    try:
+        await member.send(embed=user_embed)
+    except discord.Forbidden:
+        # If DMs are disabled, send a message in the channel
+        await ctx.send(f"{member.mention}, you've been warned but I couldn't DM you. Please enable DMs to receive warnings privately.")
+        # Also send the warning details in the channel (visible to moderators)
+        await ctx.send(embed=user_embed)
 
     # Check if the user has reached the warning limit
     if user_warnings[user_id] >= 5:
@@ -975,6 +1038,21 @@ async def send_message(ctx, channel_id: int, *, message: str):
         await ctx.send(f"Couldn't find channel with ID: {channel_id}")
         return
 
+    # Check if the channel belongs to the guild
+    if channel.guild != ctx.guild:
+        await ctx.send("The specified channel does not belong to this guild.")
+        return
+
+    # Check if the user has permission to send messages in the channel
+    if not channel.permissions_for(ctx.author).send_messages:
+        await ctx.send("You do not have permission to send messages in that channel.")
+        return
+
+    # Check if the bot has permission to send messages in the channel
+    if not channel.permissions_for(ctx.guild.me).send_messages:
+        await ctx.send("I do not have permission to send messages in that channel.")
+        return
+
     # Check if there is an attachment in the message
     attachment = None
     if ctx.message.attachments:
@@ -983,35 +1061,41 @@ async def send_message(ctx, channel_id: int, *, message: str):
     # If it's a TextChannel, send the message (and attachment if available)
     if isinstance(channel, discord.TextChannel):
         if attachment:
-            # Download the attachment from the URL and send it along with the message
-            async with aiohttp.ClientSession() as session:
-                async with session.get(attachment.url) as response:
-                    # Check if the download was successful
-                    if response.status == 200:
-                        file = io.BytesIO(await response.read())  # Read the file into memory
-                        file.seek(0)  # Move to the beginning of the file to send it
-                        await channel.send(message, file=discord.File(file, attachment.filename))
-                    else:
-                        await channel.send(f"Failed to download attachment from {attachment.url}")
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(attachment.url) as response:
+                        if response.status == 200:
+                            with io.BytesIO(await response.read()) as file:
+                                file.seek(0)
+                                await channel.send(message, file=discord.File(file, attachment.filename))
+                        else:
+                            await channel.send(f"Failed to download attachment from {attachment.url}")
+            except Exception as e:
+                await ctx.send(f"An error occurred while downloading the attachment: {e}")
         else:
             await channel.send(message)
 
-    # If it's a VoiceChannel, send the message to the first TextChannel (no reporting)
+    # If it's a VoiceChannel, send the message to the mod log channel
     elif isinstance(channel, discord.VoiceChannel):
-        text_channel = channel.guild.text_channels[0]  # You can customize this part if needed
+        text_channel = ctx.guild.get_channel(MOD_LOG_CHANNEL_ID)
+        if not text_channel:
+            await ctx.send("Could not find the mod log channel.")
+            return
+
         if attachment:
-            # Download the attachment and send it along with the message
-            async with aiohttp.ClientSession() as session:
-                async with session.get(attachment.url) as response:
-                    # Check if the download was successful
-                    if response.status == 200:
-                        file = io.BytesIO(await response.read())  # Read the file into memory
-                        file.seek(0)  # Move to the beginning of the file to send it
-                        await text_channel.send(f"Message to voice channel {channel.name}: {message}", file=discord.File(file, attachment.filename))
-                    else:
-                        await text_channel.send(f"Failed to download attachment from {attachment.url}")
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(attachment.url) as response:
+                        if response.status == 200:
+                            with io.BytesIO(await response.read()) as file:
+                                file.seek(0)
+                                await text_channel.send(f"Message to voice channel {channel.name}: {message} by {ctx.author.mention}", file=discord.File(file, attachment.filename))
+                        else:
+                            await text_channel.send(f"Failed to download attachment from {attachment.url}")
+            except Exception as e:
+                await ctx.send(f"An error occurred while downloading the attachment: {e}")
         else:
-            await text_channel.send(f"Message to voice channel {channel.name}: {message}")
+            await text_channel.send(f"Message to voice channel {channel.name}: {message} by {ctx.author.mention}")
 
 # Function to calculate days left
 def get_days_left(exam_date):
@@ -1408,58 +1492,30 @@ class CloseTicketModal(Modal, title="Close Ticket"):
         print(f"Modal submitted for ticket {ticket_id} (type: {type(ticket_id)})")
         await close_ticket(interaction, ticket_id, self.reason.value)
 
-# Capture transcript of a ticket channel
 async def capture_transcript(channel):
     """Capture all messages in the channel and format them into an HTML transcript."""
     messages = []
-    users = {}  # Dictionary to map user IDs to usernames and role colors
+    users = {}  # Dictionary to store user IDs and usernames
 
     async for message in channel.history(limit=None, oldest_first=True):
-        # Fetch user details (username, avatar, role color)
-        users[str(message.author.id)] = {
-            "username": message.author.name,
-            "avatar": message.author.avatar.url if message.author.avatar else "https://cdn.discordapp.com/embed/avatars/0.png",
-            "role_color": "#ffffff",  # Default color if no role is found
-        }
-
-        # Fetch role color (if applicable)
-        if hasattr(message.author, "roles"):
-            for role in message.author.roles:
-                if role.color != discord.Color.default():
-                    users[str(message.author.id)]["role_color"] = f"#{role.color.value:06x}"
-                    break
+        # Store user information
+        users[str(message.author.id)] = message.author.name
 
         # Prepare message data
         message_data = {
             "author": message.author.name,
             "author_id": message.author.id,
-            "author_avatar": users[str(message.author.id)]["avatar"],
-            "author_role_color": users[str(message.author.id)]["role_color"],
+            "author_avatar": message.author.avatar.url if message.author.avatar else "https://cdn.discordapp.com/embed/avatars/0.png",
+            "author_role_color": "#FFFFFF",  # Default color (you can fetch the user's role color if needed)
             "timestamp": message.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             "content": message.content,
-            "embeds": [],
+            "embeds": [embed.to_dict() for embed in message.embeds],
         }
-
-        # Add embeds (if any)
-        for embed in message.embeds:
-            embed_data = {
-                "title": embed.title,
-                "description": embed.description,
-                "color": f"#{embed.color.value:06x}" if embed.color else "#5865f2",  # Default to Discord blue
-                "fields": [],
-            }
-            for field in embed.fields:
-                embed_data["fields"].append({
-                    "name": field.name,
-                    "value": field.value,
-                })
-            message_data["embeds"].append(embed_data)
-
         messages.append(message_data)
 
     # Render the HTML template
-    template = Template(html_template)
-    transcript_html = template.render(messages=messages, users=users, ticket_id=channel.name.split("-")[-1])
+    template = env.from_string(html_template)
+    transcript_html = template.render(messages=messages, users=users)
     return transcript_html
 
 # Upload transcript to GitHub
@@ -1608,6 +1664,51 @@ async def reset_dropdown(interaction):
         await message.edit(view=view)
     except discord.NotFound:
         print("Ticket creation message not found.")
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return  # Ignore unknown commands
+    if isinstance(error, commands.CommandInvokeError) and isinstance(error.original, discord.Forbidden):
+        # Already handled in the command, no need to log
+        return
+    # Log other errors
+    logger.error(f"Error in command {ctx.command}: {error}")
+
+@bot.command()
+@has_allowed_role()
+async def sync_category(ctx, category: discord.CategoryChannel):
+    """Sync permissions for all channels in a category"""
+    try:
+        # Sync the category first (this updates all channels to match category permissions)
+        await category.edit(sync_permissions=True)
+        
+        # Get all channels in the category
+        channels = category.channels
+        
+        # Count of synced channels
+        synced_count = 0
+        
+        # Sync each channel individually (in case some didn't sync properly)
+        for channel in channels:
+            try:
+                await channel.edit(sync_permissions=True)
+                synced_count += 1
+            except discord.Forbidden:
+                logger.warning(f"Missing permissions to sync {channel.name}")
+            except discord.HTTPException as e:
+                logger.error(f"Error syncing {channel.name}: {e}")
+        
+        # Send confirmation
+        await ctx.send(f"✅ Successfully synced permissions for category **{category.name}** and its {synced_count} channels.")
+        
+    except discord.Forbidden:
+        await ctx.send("❌ I don't have permission to sync this category!")
+    except discord.HTTPException as e:
+        await ctx.send(f"❌ Error syncing category: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error in sync_category: {e}")
+        await ctx.send("❌ An unexpected error occurred while syncing the category.")
 
 @bot.command()
 async def help(ctx):
