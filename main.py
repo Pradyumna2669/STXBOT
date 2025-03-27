@@ -263,7 +263,10 @@ NSFW_KEYWORDS = [
     "doggy style", "makeup sex", "lingerie", "butt plug", "moan",
     "milf", "wank", "oral", "sucking", "dirty talk", "straddle",
     "bondage", "orgasm", "scissoring", "deeper", "slut", "cumming",
-    "jerk", "prick", "cunt", "bastard", "faggot", "sex", "asshole", "I'll teach 10people to earn", "interested people should apply", "I'll teach to earn", "steam gift", "telegram or whatsapp", "looking to help", "https://discord.gg/", "rape"
+    "jerk", "prick", "cunt", "bastard", "faggot", "sex", "asshole",
+    "I'll teach 10people to earn", "interested people should apply",
+    "I'll teach to earn", "steam gift", "telegram or whatsapp", "looking to help",
+    "https://discord.gg/", "rape"
 ]
 # Role IDs allowed to use commands
 ALLOWED_ROLE_IDS = [1121001670596378725, 1120673829350555698, 1080695859093717043, 1316094443677290548, 1175697980054057000]  # Replace with actual role IDs
